@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>2017 Car MPG Narrative Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+      body {
+        font-family: "Georgia", "Times New Roman", serif;
+        margin: 40px;
+        line-height: 1.6;
+        color: #333;
+      }
+      #chart {
+        margin-top: 20px;
+      }
+      .scene-title {
+        font-size: 22px;
+        font-weight: normal;
+        margin-bottom: 15px;
+        color: #2c3e50;
+        font-family: "Arial", "Helvetica", sans-serif;
+      }
+      .annotation {
+        font-style: normal;
+        color: #555;
+        margin-bottom: 15px;
+        font-size: 14px;
+        max-width: 800px;
+      }
+      .button {
+        padding: 10px 16px;
+        margin-top: 25px;
+        margin-right: 10px;
+        background-color: #34495e;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-family: "Arial", "Helvetica", sans-serif;
+      }
+      .button:hover {
+        background-color: #2c3e50;
+      }
+      .legend {
+        font-size: 12px;
+        font-family: "Arial", "Helvetica", sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="scene-title" id="scene-title"></div>
+    <div class="annotation" id="scene-annotation"></div>
+    <div id="chart"></div>
+    <button class="button" onclick="prevScene()">Previous</button>
+    <button class="button" onclick="nextScene()">Next</button>
+
+    <script>
+      let sceneIndex = 0;
+      let svg = d3
+        .select("#chart")
+        .append("svg")
+        .attr("width", 800)
+        .attr("height", 500);
+
+      const margin = { top: 40, right: 20, bottom: 50, left: 60 },
+        width = 800 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+      const g = svg
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+      const colorScale = d3
+        .scaleSequential()
+        .domain([10, 60])
+        .interpolator(d3.interpolateYlGnBu);
+      let data;
+
+      d3.csv("cars2017.csv").then((d) => {
+        data = d.map((d) => ({
+          Make: d.Make,
+          Fuel: d.Fuel,
+          Cylinders: +d.EngineCylinders,
+          Highway: +d.AverageHighwayMPG,
+          City: +d.AverageCityMPG,
+        }));
+        drawScene();
+      });
+
+      function clearChart() {
+        g.selectAll("*").remove();
+        d3.selectAll(".legend").remove();
+        // Remove any tooltips that might persist from Scene 4
+        d3.selectAll("body > div")
+          .filter(function () {
+            return (
+              d3.select(this).style("position") === "absolute" &&
+              d3.select(this).style("background-color") === "rgb(255, 255, 255)"
+            );
+          })
+          .remove();
+      }
+
+      function drawScene() {
+        clearChart();
+        const title = d3.select("#scene-title");
+        const annotation = d3.select("#scene-annotation");
+
+        if (sceneIndex === 0) {
+          title.text(
+            "Smart Car Buying: Understanding What Affects Your Fuel Economy"
+          );
+          annotation.html(
+            "<strong>Welcome, Potential Car Buyers!</strong><br><br>" +
+              "This narrative visualization helps you understand the key factors that impact vehicle fuel efficiency. By exploring real 2017 data, you'll discover:<br><br>" +
+              "<strong>What to expect:</strong> Most cars achieve 20–35 highway MPG<br>" +
+              "<strong>Fuel type matters:</strong> Electric (including hybrid) and diesel vehicles offer superior efficiency<br>" +
+              "<strong>Engine size impact:</strong> Fewer cylinders typically mean better mileage<br>" +
+              "<strong>Brand differences:</strong> Some manufacturers consistently deliver better fuel economy<br>" +
+              "<strong>Driving context:</strong> City vs. highway performance varies by vehicle design<br><br>" +
+              "<strong>Your Journey:</strong> Navigate through 4 data-driven scenes to understand how <em>fuel type, engine cylinders, brand choice, and driving environment</em> affect your potential fuel costs and environmental impact.<br><br>" +
+              "<strong>Goal:</strong> Make a well-informed vehicle choice that matches your budget, driving needs, and efficiency priorities.<br><br>" +
+              "<strong>Click 'Next' to begin exploring the data that will guide your car buying decision!</strong>"
+          );
+          return;
+        }
+
+        if (sceneIndex === 1) {
+          title.text("Scene 1: Fuel Efficiency Distribution");
+          annotation.html(
+            "<strong>Scene 1: Highway MPG Distribution by Fuel Type</strong><br>" +
+              "Most 2017 cars have a highway MPG clustered between <strong>20–35 MPG</strong>.<br>" +
+              "<span style='color: #2166ac;'>■</span> <strong>Electric (including hybrid) vehicles</strong> dominate the high-efficiency range (100+ MPG).<br>" +
+              "<span style='color: #762a83;'>■</span> <strong>Diesel cars</strong> also show good efficiency.<br>" +
+              "<span style='color: #5aae61;'>■</span> <strong>Gasoline cars</strong> make up most of the distribution.<br><br>" +
+              "<em>Note: X-axis uses logarithmic scale to better show both conventional and electric vehicles.</em><br><br>" +
+              "<strong>Implication:</strong> Electric (including hybrid) and diesel vehicles offer the best fuel efficiency. Choose based on your driving needs and charging infrastructure."
+          );
+
+          // Filter data to only include cars with highway MPG between 10-140 (to include electric vehicles)
+          const filteredData = data.filter(
+            (d) => d.Highway >= 10 && d.Highway <= 140
+          );
+
+          // Get unique highway MPG values from the filtered data
+          const uniqueHighwayMPG = [
+            ...new Set(filteredData.map((d) => d.Highway)),
+          ].sort((a, b) => a - b);
+
+          // Use log scale for x-axis to handle outliers better
+          const x = d3.scaleLog().domain([10, 140]).range([0, width]);
+          const histogram = d3
+            .histogram()
+            .value((d) => d.Highway)
+            .thresholds(uniqueHighwayMPG);
+          const bins = histogram(filteredData);
+
+          // Calculate total number of cars for percentage calculation
+          const totalCars = filteredData.length;
+
+          // Calculate max percentage for y-scale domain
+          const maxPercentage = d3.max(
+            bins,
+            (d) => (d.length / totalCars) * 100
+          );
+
+          const y = d3
+            .scaleLinear()
+            .domain([0, maxPercentage])
+            .range([height, 0]);
+
+          // Color scale for fuel types
+          const fuelColors = {
+            Gasoline: "#5aae61",
+            Diesel: "#762a83",
+            Electricity: "#2166ac",
+          };
+
+          g.append("g").call(d3.axisLeft(y).tickFormat((d) => d + "%"));
+          g.append("text")
+            .attr("class", "x label")
+            .attr("text-anchor", "end")
+            .attr("x", width)
+            .attr("y", height + 40)
+            .text("Highway MPG");
+
+          g.append("text")
+            .attr("class", "y label")
+            .attr("text-anchor", "end")
+            .attr("x", -20)
+            .attr("y", -30)
+            .attr("transform", "rotate(-90)")
+            .text("Percentage of Cars");
+
+          g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(
+              d3
+                .axisBottom(x)
+                .tickValues([10, 15, 20, 25, 30, 35, 40, 50, 60, 80, 100, 120])
+                .tickFormat(d3.format("d"))
+            );
+
+          // Create stacked bars by fuel type
+          bins.forEach((bin) => {
+            // Only create bars if there are cars in this bin
+            if (bin.length === 0) return;
+
+            // Skip bins in the 50-80 range where we know there are no cars
+            const binMidpoint = (bin.x0 + bin.x1) / 2;
+            if (binMidpoint > 45 && binMidpoint < 82) return;
+
+            // Group cars in this bin by fuel type
+            const fuelGroups = d3.group(bin, (d) => d.Fuel);
+
+            let yOffset = 0;
+            // Calculate bin width more carefully for log scale
+            const binWidth = Math.max(x(bin.x1) - x(bin.x0) - 1, 2);
+
+            ["Gasoline", "Diesel", "Electricity"].forEach((fuelType) => {
+              const cars = fuelGroups.get(fuelType) || [];
+              if (cars.length > 0) {
+                const percentage = (cars.length / totalCars) * 100;
+                const barHeight = height - y(percentage);
+
+                g.append("rect")
+                  .attr("x", x(bin.x0))
+                  .attr("y", y(yOffset + percentage))
+                  .attr("width", binWidth)
+                  .attr("height", barHeight)
+                  .attr("fill", fuelColors[fuelType])
+                  .attr("stroke", "white")
+                  .attr("stroke-width", 0.5);
+
+                yOffset += percentage;
+              }
+            });
+          });
+
+          // Add legend
+          const legend = svg
+            .append("g")
+            .attr("class", "legend")
+            .attr(
+              "transform",
+              `translate(${width + margin.left - 120}, ${margin.top})`
+            );
+
+          const legendData = [
+            { fuel: "Electric (including hybrid)", color: "#2166ac" },
+            { fuel: "Diesel", color: "#762a83" },
+            { fuel: "Gasoline", color: "#5aae61" },
+          ];
+
+          legendData.forEach((d, i) => {
+            const legendRow = legend
+              .append("g")
+              .attr("transform", `translate(0, ${i * 20})`);
+
+            legendRow
+              .append("rect")
+              .attr("width", 15)
+              .attr("height", 15)
+              .attr("fill", d.color);
+
+            legendRow
+              .append("text")
+              .attr("x", 20)
+              .attr("y", 12)
+              .text(d.fuel)
+              .style("font-size", "12px");
+          });
+        } else if (sceneIndex === 2) {
+          title.text("Scene 2: MPG vs. Engine Cylinders");
+          annotation.html(
+            "<strong>Scene 2: MPG vs Engine Cylinders</strong><br>" +
+              "More cylinders generally mean worse fuel efficiency. 4-cylinder cars have the best city and highway MPG.<br><br>" +
+              "<strong>Implication:</strong> Buyers who value fuel economy should avoid 6+ cylinder engines unless needed for performance."
+          );
+
+          const grouped = d3.groups(data, (d) => d.Cylinders);
+          const summary = grouped
+            .map(([cyl, vals]) => ({
+              Cylinders: cyl,
+              Highway: d3.mean(vals, (d) => d.Highway),
+              City: d3.mean(vals, (d) => d.City),
+            }))
+            .filter((d) => d.Cylinders > 0);
+
+          const x = d3
+            .scaleLinear()
+            .domain(d3.extent(summary, (d) => d.Cylinders))
+            .range([0, width]);
+          const y = d3.scaleLinear().domain([10, 60]).range([height, 0]);
+
+          g.append("g").call(d3.axisLeft(y));
+          g.append("text")
+            .attr("class", "x label")
+            .attr("text-anchor", "end")
+            .attr("x", width)
+            .attr("y", height + 40)
+            .text("Number of Cylinders");
+
+          g.append("text")
+            .attr("class", "y label")
+            .attr("text-anchor", "end")
+            .attr("x", -20)
+            .attr("y", -30)
+            .attr("transform", "rotate(-90)")
+            .text("MPG");
+
+          g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x).ticks(6));
+
+          // Create tooltip for Scene 2
+          const tooltip = d3
+            .select("body")
+            .append("div")
+            .style("position", "absolute")
+            .style("padding", "8px")
+            .style("background", "#fff")
+            .style("border", "1px solid #ccc")
+            .style("border-radius", "4px")
+            .style("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
+            .style("pointer-events", "none")
+            .style("font-size", "12px")
+            .style("display", "block");
+
+          // Find a good default point to highlight (6-cylinder for comparison with sweet spot)
+          const defaultPoint =
+            summary.find((d) => d.Cylinders === 6) ||
+            summary.find((d) => d.Cylinders === 8) ||
+            summary[0];
+          let selectedPoint = defaultPoint;
+
+          // Show default tooltip
+          if (defaultPoint) {
+            tooltip
+              .html(
+                `<strong>${
+                  defaultPoint.Cylinders
+                } Cylinders</strong><br>Highway MPG: ${defaultPoint.Highway.toFixed(
+                  1
+                )}<br>City MPG: ${defaultPoint.City.toFixed(1)}`
+              )
+              .style(
+                "left",
+                x(defaultPoint.Cylinders) + margin.left + 60 + "px"
+              )
+              .style("top", y(defaultPoint.Highway) + margin.top - 20 + "px");
+          }
+
+          // Create selection indicator circle for highway MPG
+          const selectionIndicatorHighway = g
+            .append("circle")
+            .attr("class", "selection-indicator-highway")
+            .attr("fill", "none")
+            .attr("stroke", "#e74c3c")
+            .attr("stroke-width", 3)
+            .attr("opacity", 0.9)
+            .style("pointer-events", "none");
+
+          // Create selection indicator for city MPG (triangle outline)
+          const selectionIndicatorCity = g
+            .append("polygon")
+            .attr("class", "selection-indicator-city")
+            .attr("fill", "none")
+            .attr("stroke", "#e74c3c")
+            .attr("stroke-width", 3)
+            .attr("opacity", 0.9)
+            .style("pointer-events", "none");
+
+          // Function to update selection
+          function updateSelection(d, isHighway = true) {
+            selectedPoint = d;
+
+            if (isHighway) {
+              // Update highway selection indicator
+              selectionIndicatorHighway
+                .attr("cx", x(d.Cylinders))
+                .attr("cy", y(d.Highway))
+                .attr("r", 12)
+                .attr("opacity", 0.9);
+              // Hide city indicator
+              selectionIndicatorCity.attr("opacity", 0);
+            } else {
+              // Update city selection indicator
+              const cx = x(d.Cylinders);
+              const cy = y(d.City);
+              const size = 12;
+              selectionIndicatorCity
+                .attr(
+                  "points",
+                  `${cx},${cy - size} ${cx - size},${cy + size} ${cx + size},${
+                    cy + size
+                  }`
+                )
+                .attr("opacity", 0.9);
+              // Hide highway indicator
+              selectionIndicatorHighway.attr("opacity", 0);
+            }
+
+            // Update tooltip
+            tooltip
+              .html(
+                `<strong>${
+                  d.Cylinders
+                } Cylinders</strong><br>Highway MPG: ${d.Highway.toFixed(
+                  1
+                )}<br>City MPG: ${d.City.toFixed(1)}<br><em>${
+                  isHighway ? "Highway" : "City"
+                } data selected</em>`
+              )
+              .style("left", x(d.Cylinders) + margin.left + 60 + "px")
+              .style(
+                "top",
+                y(isHighway ? d.Highway : d.City) + margin.top - 20 + "px"
+              );
+          }
+
+          // Initialize with default point (highway)
+          if (defaultPoint) {
+            updateSelection(defaultPoint, true);
+          }
+
+          // Annotation 1: Add trend line showing negative correlation (drawn first so it's behind points)
+          g.append("line")
+            .attr("x1", x(2))
+            .attr("y1", y(45))
+            .attr("x2", x(12))
+            .attr("y2", y(18))
+            .attr("stroke", "#e74c3c")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5")
+            .attr("opacity", 0.8)
+            .style("pointer-events", "none");
+
+          g.append("text")
+            .attr("x", x(7))
+            .attr("y", y(32))
+            .attr("text-anchor", "middle")
+            .attr("font-size", "11px")
+            .attr("fill", "#e74c3c")
+            .attr("font-weight", "bold")
+            .text("1. Clear downward trend")
+            .style("pointer-events", "none");
+
+          // Annotation 3: Add efficiency zone background (drawn early so it's behind points)
+          g.append("rect")
+            .attr("x", x(2.5))
+            .attr("y", y(50))
+            .attr("width", x(6) - x(2.5))
+            .attr("height", y(25) - y(50))
+            .attr("fill", "#2ecc71")
+            .attr("opacity", 0.1)
+            .attr("rx", 5)
+            .style("pointer-events", "none");
+
+          g.append("text")
+            .attr("x", x(4.2))
+            .attr("y", y(27))
+            .attr("font-size", "10px")
+            .attr("fill", "#27ae60")
+            .attr("font-weight", "bold")
+            .text("3. Efficient Zone")
+            .style("pointer-events", "none");
+
+          g.selectAll("circle.highway")
+            .data(summary)
+            .enter()
+            .append("circle")
+            .attr("class", "highway")
+            .attr("cx", (d) => x(d.Cylinders))
+            .attr("cy", (d) => y(d.Highway))
+            .attr("r", 8)
+            .attr("fill", (d) =>
+              d === selectedPoint
+                ? d3.color(colorScale(d.Highway)).darker(0.5)
+                : colorScale(d.Highway)
+            )
+            .attr("stroke", "white")
+            .attr("stroke-width", 1)
+            .attr("opacity", (d) => (d === selectedPoint ? 0.9 : 0.7))
+            .style("cursor", "pointer")
+            .on("mouseover", (event, d) => {
+              // Update all elements
+              g.selectAll("circle.highway")
+                .attr("fill", (datum) =>
+                  datum === d
+                    ? d3.color(colorScale(datum.Highway)).darker(0.5)
+                    : colorScale(datum.Highway)
+                )
+                .attr("opacity", (datum) => (datum === d ? 0.9 : 0.7));
+
+              g.selectAll("polygon.city")
+                .attr("fill", (datum) => colorScale(datum.City))
+                .attr("opacity", 0.7);
+
+              updateSelection(d, true);
+            });
+
+          // Use triangles for city MPG to make them more distinctive
+          g.selectAll("polygon.city")
+            .data(summary)
+            .enter()
+            .append("polygon")
+            .attr("class", "city")
+            .attr("points", (d) => {
+              const cx = x(d.Cylinders);
+              const cy = y(d.City);
+              const size = 8;
+              // Create upward-pointing triangle
+              return `${cx},${cy - size} ${cx - size},${cy + size} ${
+                cx + size
+              },${cy + size}`;
+            })
+            .attr("fill", (d) => colorScale(d.City))
+            .attr("stroke", "white")
+            .attr("stroke-width", 1)
+            .attr("opacity", 0.7)
+            .style("cursor", "pointer")
+            .on("mouseover", (event, d) => {
+              // Update all elements
+              g.selectAll("polygon.city")
+                .attr("fill", (datum) =>
+                  datum === d
+                    ? d3.color(colorScale(datum.City)).darker(0.5)
+                    : colorScale(datum.City)
+                )
+                .attr("opacity", (datum) => (datum === d ? 0.9 : 0.7));
+
+              g.selectAll("circle.highway")
+                .attr("fill", (datum) => colorScale(datum.Highway))
+                .attr("opacity", 0.7);
+
+              updateSelection(d, false);
+            });
+
+          // Annotation 2: Highlight the optimal efficiency point (4-cylinder) - drawn after points so it's visible
+          const fourCylData = summary.find((d) => d.Cylinders === 4);
+          if (fourCylData) {
+            g.append("circle")
+              .attr("cx", x(4))
+              .attr("cy", y(fourCylData.Highway))
+              .attr("r", 12)
+              .attr("fill", "none")
+              .attr("stroke", "#27ae60")
+              .attr("stroke-width", 3)
+              .attr("opacity", 0.8)
+              .style("pointer-events", "none");
+
+            g.append("text")
+              .attr("x", x(4) + 20)
+              .attr("y", y(fourCylData.Highway) - 5)
+              .attr("font-size", "11px")
+              .attr("fill", "#27ae60")
+              .attr("font-weight", "bold")
+              .text("2. Sweet spot:")
+              .style("pointer-events", "none");
+
+            g.append("text")
+              .attr("x", x(4) + 20)
+              .attr("y", y(fourCylData.Highway) + 8)
+              .attr("font-size", "10px")
+              .attr("fill", "#27ae60")
+              .text("4 cylinders")
+              .style("pointer-events", "none");
+          }
+
+          const legend = svg
+            .append("g")
+            .attr("class", "legend")
+            .attr(
+              "transform",
+              `translate(${width + margin.left - 100},${margin.top})`
+            );
+
+          // Highway MPG legend (circle)
+          legend
+            .append("circle")
+            .attr("cx", 0)
+            .attr("cy", 0)
+            .attr("r", 8)
+            .attr("fill", colorScale(35))
+            .attr("stroke", "white")
+            .attr("stroke-width", 1);
+          legend
+            .append("text")
+            .attr("x", 15)
+            .attr("y", 5)
+            .text("Highway MPG")
+            .style("font-size", "12px");
+
+          // City MPG legend (triangle)
+          legend
+            .append("polygon")
+            .attr("points", "0,25 -8,35 8,35")
+            .attr("fill", colorScale(25))
+            .attr("stroke", "white")
+            .attr("stroke-width", 1);
+          legend
+            .append("text")
+            .attr("x", 15)
+            .attr("y", 35)
+            .text("City MPG")
+            .style("font-size", "12px");
+        } else if (sceneIndex === 3) {
+          title.text("Scene 3: Top Brands by Efficiency");
+          annotation.html(
+            "<strong>Scene 3: Brand Rankings by MPG</strong><br>" +
+              "Brands like <strong>Toyota, Honda, and Hyundai</strong> deliver consistently high average MPG.<br>" +
+              "Luxury and performance brands tend to fall behind.<br><br>" +
+              "<strong>Implication:</strong> Choosing a brand with strong efficiency history helps save fuel and money."
+          );
+
+          const topBrands = Array.from(
+            d3.rollup(
+              data,
+              (v) => d3.mean(v, (d) => d.Highway),
+              (d) => d.Make
+            )
+          )
+            .map(([Make, MPG]) => ({ Make, MPG }))
+            .sort((a, b) => b.MPG - a.MPG)
+            .slice(0, 10);
+
+          const x = d3
+            .scaleLinear()
+            .domain([0, d3.max(topBrands, (d) => d.MPG)])
+            .range([0, width]);
+          const y = d3
+            .scaleBand()
+            .domain(topBrands.map((d) => d.Make))
+            .range([0, height])
+            .padding(0.2);
+
+          g.append("g").call(d3.axisLeft(y));
+          g.append("text")
+            .attr("class", "x label")
+            .attr("text-anchor", "end")
+            .attr("x", width)
+            .attr("y", height + 40)
+            .text("Average Highway MPG");
+
+          g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x));
+
+          g.selectAll("rect")
+            .data(topBrands)
+            .enter()
+            .append("rect")
+            .attr("x", 0)
+            .attr("y", (d) => y(d.Make))
+            .attr("width", (d) => x(d.MPG))
+            .attr("height", y.bandwidth())
+            .attr("fill", (d) => colorScale(d.MPG));
+        } else if (sceneIndex === 4) {
+          title.text("Scene 4: Explore MPG by Brand and Cylinders");
+          annotation.html(
+            "<strong>Scene 4: City vs. Highway Efficiency</strong><br>" +
+              "Some cars are optimized for highway travel, others for stop-and-go urban driving.<br>" +
+              "Efficiency depends on engine, vehicle design, and intended use.<br><br>" +
+              "<strong>Implication:</strong> Match your vehicle choice to your environment. Prioritize city MPG for urban driving, highway MPG for long-distance travel."
+          );
+
+          // Use a more focused scale to spread out the clustered data points
+          // Most cars are in the 12-45 range, so focus on that
+          const x = d3.scaleLinear().domain([12, 45]).range([0, width]);
+          const y = d3.scaleLinear().domain([15, 50]).range([height, 0]);
+          const r = d3.scaleLinear().domain([2, 12]).range([4, 12]);
+
+          g.append("g").call(d3.axisLeft(y));
+          g.append("text")
+            .attr("class", "x label")
+            .attr("text-anchor", "end")
+            .attr("x", width)
+            .attr("y", height + 40)
+            .text("City MPG");
+
+          g.append("text")
+            .attr("class", "y label")
+            .attr("text-anchor", "end")
+            .attr("x", -20)
+            .attr("y", -30)
+            .attr("transform", "rotate(-90)")
+            .text("Highway MPG");
+
+          g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x));
+
+          // Add diagonal reference line to show where highway = city MPG
+          g.append("line")
+            .attr("x1", x(12))
+            .attr("y1", y(12))
+            .attr("x2", x(45))
+            .attr("y2", y(45))
+            .attr("stroke", "#bdc3c7")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "3,3")
+            .attr("opacity", 0.7);
+
+          g.append("text")
+            .attr("x", x(35))
+            .attr("y", y(32))
+            .attr("font-size", "10px")
+            .attr("fill", "#7f8c8d")
+            .attr("transform", `rotate(-45, ${x(35)}, ${y(32)})`)
+            .text("Highway = City");
+
+          const tooltip = d3
+            .select("body")
+            .append("div")
+            .style("position", "absolute")
+            .style("padding", "8px")
+            .style("background", "#fff")
+            .style("border", "1px solid #ccc")
+            .style("border-radius", "4px")
+            .style("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
+            .style("pointer-events", "none")
+            .style("font-size", "12px")
+            .style("display", "block");
+
+          // Find a good default point to highlight
+          const defaultPoint = data.find(
+            (d) =>
+              d.City >= 20 && d.City <= 25 && d.Highway >= 25 && d.Highway <= 30
+          );
+          let selectedPoint = defaultPoint;
+
+          // Show default tooltip
+          if (defaultPoint) {
+            tooltip
+              .html(
+                `<strong>${defaultPoint.Make}</strong><br>City: ${defaultPoint.City} MPG<br>Highway: ${defaultPoint.Highway} MPG<br>Cylinders: ${defaultPoint.Cylinders}`
+              )
+              .style("left", x(defaultPoint.City) + margin.left + 60 + "px")
+              .style("top", y(defaultPoint.Highway) + margin.top - 20 + "px");
+          }
+
+          // Create selection indicator circle (initially hidden)
+          const selectionIndicator = g
+            .append("circle")
+            .attr("class", "selection-indicator")
+            .attr("fill", "none")
+            .attr("stroke", "#e74c3c")
+            .attr("stroke-width", 3)
+            .attr("opacity", 0.9)
+            .style("pointer-events", "none");
+
+          // Function to update selection
+          function updateSelection(d) {
+            selectedPoint = d;
+            // Update selection indicator
+            selectionIndicator
+              .attr("cx", x(d.City))
+              .attr("cy", y(d.Highway))
+              .attr("r", r(d.Cylinders) + 4);
+
+            // Update tooltip
+            tooltip
+              .html(
+                `<strong>${d.Make}</strong><br>City: ${d.City} MPG<br>Highway: ${d.Highway} MPG<br>Cylinders: ${d.Cylinders}`
+              )
+              .style("left", x(d.City) + margin.left + 60 + "px")
+              .style("top", y(d.Highway) + margin.top - 20 + "px");
+          }
+
+          // Initialize with default point
+          if (defaultPoint) {
+            updateSelection(defaultPoint);
+          }
+
+          g.selectAll("circle.data-point")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("class", "data-point")
+            .attr("cx", (d) => x(d.City))
+            .attr("cy", (d) => y(d.Highway))
+            .attr("r", (d) => r(d.Cylinders))
+            .attr("fill", (d) =>
+              d === selectedPoint
+                ? d3.color(colorScale(d.Highway)).darker(0.5)
+                : colorScale(d.Highway)
+            )
+            .attr("opacity", (d) => (d === selectedPoint ? 0.9 : 0.6))
+            .style("cursor", "pointer")
+            .on("mouseover", (event, d) => {
+              // Update all circles - darken hovered, normal for others
+              g.selectAll("circle.data-point")
+                .attr("fill", (datum) =>
+                  datum === d
+                    ? d3.color(colorScale(datum.Highway)).darker(0.5)
+                    : colorScale(datum.Highway)
+                )
+                .attr("opacity", (datum) => (datum === d ? 0.9 : 0.6));
+
+              updateSelection(d);
+            });
+        } else if (sceneIndex === 5) {
+          title.text("Summary: Your Car Buying Decision Guide");
+          annotation.html(
+            "<strong>Key Insights for Smart Car Buyers</strong><br><br>" +
+              "<strong>1. Fuel Type Impact:</strong> Electric (including hybrid) vehicles achieve 100+ MPG equivalent, while most gasoline cars range 20-35 MPG. Diesel offers a middle ground with good efficiency.<br><br>" +
+              "<strong>2. Engine Size Matters:</strong> 4-cylinder engines provide the best fuel economy sweet spot. Each additional cylinder typically reduces efficiency significantly.<br><br>" +
+              "<strong>3. Brand Reliability:</strong> Toyota, Honda, and Hyundai consistently rank highest for fuel efficiency. Luxury and performance brands prioritize power over economy.<br><br>" +
+              "<strong>4. Driving Context:</strong> Highway driving generally yields better MPG than city driving. Choose based on your primary use case.<br><br>" +
+              "<strong>Smart Buying Strategy:</strong><br>" +
+              "• <strong>For maximum efficiency:</strong> Consider electric (including hybrid) or hybrid vehicles<br>" +
+              "• <strong>For balanced performance:</strong> Choose 4-cylinder engines from efficient brands<br>" +
+              "• <strong>For your lifestyle:</strong> Prioritize city MPG for urban driving, highway MPG for commuting<br>" +
+              "• <strong>For long-term savings:</strong> Higher MPG reduces fuel costs and environmental impact<br><br>" +
+              "<strong>Ready to make an informed choice? Use these insights to find your perfect vehicle!</strong>"
+          );
+        }
+      }
+
+      function prevScene() {
+        sceneIndex = (sceneIndex - 1 + 6) % 6;
+        drawScene();
+      }
+
+      function nextScene() {
+        sceneIndex = (sceneIndex + 1) % 6;
+        drawScene();
+      }
+    </script>
+  </body>
+</html>
